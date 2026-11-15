@@ -17,7 +17,7 @@ import {
   ZapIcon
 } from './components/Icons'
 
-import Login from './pages/Login'
+import Login from './pages/login'
 import Register from './pages/Register'
 import CommunityDashboard from './pages/CommunityDashboard'
 import CommunityMonitoring from './pages/CommunityMonitoring'
