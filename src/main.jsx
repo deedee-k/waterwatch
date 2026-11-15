@@ -1,0 +1,25 @@
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App'
+import './index.css'
+
+import { registerSW } from 'virtual:pwa-register';
+
+registerSW({
+  onOfflineReady() {
+    console.log('App is ready to work offline');
+  },
+  onNeedRefresh() {
+    // Optionally notify user that new content is available
+    console.log('New content available, reload to update');
+  }
+});
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
+)
