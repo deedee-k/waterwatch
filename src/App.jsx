@@ -14,10 +14,11 @@ import {
   BellIcon,
   GlobeIcon,
   GaugeIcon,
-  ZapIcon
+  ZapIcon,
+  UsersIcon
 } from './components/Icons'
 
-import Login from './pages/Login'
+import Login from './pages/login'
 import Register from './pages/Register'
 import CommunityDashboard from './pages/CommunityDashboard'
 import CommunityMonitoring from './pages/CommunityMonitoring'
@@ -26,6 +27,7 @@ import MyReports from './pages/MyReports'
 import Notifications from './pages/Notifications'
 import WascoDashboard from './pages/WascoDashboard'
 import TechnicianDashboard from './pages/TechnicianDashboard'
+import StaffManagement from './pages/StaffManagement'
 
 function OfflineBanner() {
   const [online, setOnline] = useState(isOnline())
@@ -144,13 +146,11 @@ function MainApp() {
   const [showLangModal, setShowLangModal] = useState(false)
 
   useEffect(() => {
-    // Try to restore a saved session from IndexedDB (offline login)
     db.auth.get('session').then(stored => {
       if (stored && stored.user) {
         setSession(stored);
         return;
       }
-      // Fallback to online session
       supabase.auth.getSession().then(({ data }) => setSession(data.session));
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
@@ -196,11 +196,8 @@ function MainApp() {
   return (
     <>
       <OfflineBanner />
-
-      {/* LANGUAGE MODAL PANEL */}
       <LanguageModalPanel isOpen={showLangModal} onClose={() => setShowLangModal(false)} />
 
-      {/* MOBILE TOPBAR */}
       <header className="mobile-topbar">
         <div className="mobile-brand">
           <img src="/wasco-logo.png" alt="W" onError={(e) => e.target.style.display = 'none'} />
@@ -208,20 +205,13 @@ function MainApp() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <LanguageSelector onOpen={() => setShowLangModal(true)} />
-
-          <button
-            className="btn-logout"
-            onClick={() => supabase.auth.signOut()}
-            title={t('nav_logout')}
-            style={{ padding: '0.3rem' }}
-          >
+          <button className="btn-logout" onClick={() => supabase.auth.signOut()} title={t('nav_logout')} style={{ padding: '0.3rem' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
           </button>
         </div>
       </header>
 
       <div className="app-shell">
-        {/* DESKTOP SIDEBAR */}
         <aside className="sidebar-pro">
           <div className="brand" style={{ justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -231,12 +221,7 @@ function MainApp() {
           </div>
 
           <div style={{ padding: '0.75rem 1rem 0 1rem' }}>
-            <button
-              type="button"
-              className="lang-toggle-btn"
-              style={{ width: '100%', justifyContent: 'center' }}
-              onClick={() => setShowLangModal(true)}
-            >
+            <button type="button" className="lang-toggle-btn" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowLangModal(true)}>
               <GlobeIcon size={16} color="var(--primary)" />
               <span>{lang === 'st' ? '🇱🇸 Sesotho Side' : '🇬🇧 English Side'}</span>
             </button>
@@ -253,6 +238,7 @@ function MainApp() {
 
             {profile?.role === 'wasco' && <>
               <NavLink to="/wasco" icon={GaugeIcon}>{t('nav_wasco')}</NavLink>
+              <NavLink to="/wasco/staff" icon={UsersIcon}>Staff Management</NavLink>
             </>}
 
             {profile?.role === 'technician' && <>
@@ -272,7 +258,6 @@ function MainApp() {
           </div>
         </aside>
 
-        {/* MAIN VIEW */}
         <main className="main-pro">
           <Routes>
             {profile?.role === 'community' && <>
@@ -281,14 +266,18 @@ function MainApp() {
               <Route path="/report" element={<ReportProblem userId={session.user.id} />} />
               <Route path="/my-reports" element={<MyReports userId={session.user.id} />} />
               <Route path="/notifications" element={<Notifications userId={session.user.id} />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </>}
 
             {profile?.role === 'wasco' && <>
               <Route path="/wasco" element={<WascoDashboard userId={session.user.id} />} />
+              <Route path="/wasco/staff" element={<StaffManagement />} />
+              <Route path="*" element={<Navigate to="/wasco" replace />} />
             </>}
 
             {profile?.role === 'technician' && <>
               <Route path="/tech" element={<TechnicianDashboard userId={session.user.id} />} />
+              <Route path="*" element={<Navigate to="/tech" replace />} />
             </>}
 
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -296,7 +285,6 @@ function MainApp() {
         </main>
       </div>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR */}
       {profile?.role === 'community' && (
         <nav className="mobile-bottom-nav">
           <MobileNavItem to="/" icon={HomeIcon} label={t('nav_overview')} />

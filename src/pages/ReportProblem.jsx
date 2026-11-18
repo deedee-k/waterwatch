@@ -54,7 +54,6 @@ export default function ReportProblem({ userId }) {
     const ref = makeRef()
     const now = new Date().toISOString()
 
-    // 1. Fetch available technicians for automated dispatch
     let techs = []
     try {
       const { data } = await supabase.from('profiles').select('*').eq('role', 'technician')
@@ -66,7 +65,6 @@ export default function ReportProblem({ userId }) {
     const activeReports = await db.reports.toArray()
     const catsMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
-    // 2. Automated Work Order Issuance Engine (< 5s dispatch)
     const dispatchPkg = createAutoDispatchPackage({
       category_id: form.category_id,
       description: form.description,
@@ -106,19 +104,18 @@ export default function ReportProblem({ userId }) {
     if (isOnline()) flushOutbox()
     setSubmitting(false)
 
-    // Show immediate confirmation of automated work order issuance
     setIssuedWorkOrder({
       ...payload,
       technician_name: dispatchPkg.technician_name
     })
   }
 
-  function handleFallback() {
+  function handleSMS() {
     if (!form.description) {
       alert(lang === 'st' ? "Ka kopo, hlalosa bothata pele o romela SMS." : "Please describe the issue first.")
       return
     }
-    const wascoNumber = "+26650000000"
+    const wascoNumber = "+26669181836"
     const cat = categories.find(c => c.id === form.category_id)
     const categoryName = lang === 'st' ? (cat?.name_st || cat?.name_en || 'Bothata') : (cat?.name_en || 'Unknown')
 
@@ -141,8 +138,37 @@ export default function ReportProblem({ userId }) {
     if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
       window.location.href = `sms:${wascoNumber}?body=${text}`
     } else {
-      alert(lang === 'st' ? "Tšebeletso ea SMS e sebetsa feela lisebelisong tsa mohala." : "SMS fallback is only available on mobile devices.")
+      alert(lang === 'st' ? "Tšebeletso ea SMS e sebetsa feela lisebelisoa tsa mohala." : "SMS fallback is only available on mobile devices.")
     }
+  }
+
+  function handleWhatsApp() {
+    if (!form.description) {
+      alert(lang === 'st' ? "Ka kopo, hlalosa bothata pele o romela WhatsApp." : "Please describe the issue first so we can include it in the message.")
+      return
+    }
+    
+    const wascoPhone = "26669181836" // Replace with real number without + or spaces
+    const cat = categories.find(c => c.id === form.category_id)
+    const categoryName = lang === 'st' ? (cat?.name_st || cat?.name_en || 'Bothata') : (cat?.name_en || 'Unknown')
+    
+    const text = encodeURIComponent(
+      lang === 'st' ? (
+        `*TLALEHO EA METSI EA WATERWATCH*\n` +
+        `*Sebaka:* Maseru West\n` +
+        `*Mofuta:* ${categoryName}\n` +
+        `*Aterese:* ${form.location_text || 'Ha e boleloa'}\n` +
+        `*Lintlha:* ${form.description}`
+      ) : (
+        `*WATERWATCH REPORT*\n` +
+        `*Area:* Maseru West\n` +
+        `*Category:* ${categoryName}\n` +
+        `*Location:* ${form.location_text || 'Not specified'}\n` +
+        `*Details:* ${form.description}`
+      )
+    )
+    
+    window.open(`https://wa.me/${wascoPhone}?text=${text}`, '_blank')
   }
 
   return (
@@ -150,17 +176,10 @@ export default function ReportProblem({ userId }) {
 
       {/* BILINGUAL LANGUAGE SWITCHER STRIP */}
       <div style={{
-        background: 'white',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-lg)',
-        padding: '0.6rem 1.25rem',
-        marginBottom: '1.25rem',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '0.5rem',
-        boxShadow: 'var(--shadow-sm)'
+        background: 'white', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
+        padding: '0.6rem 1.25rem', marginBottom: '1.25rem', display: 'flex',
+        justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap',
+        gap: '0.5rem', boxShadow: 'var(--shadow-sm)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <GlobeIcon size={16} color="var(--primary)" />
@@ -170,40 +189,8 @@ export default function ReportProblem({ userId }) {
         </div>
 
         <div style={{ display: 'flex', gap: '0.35rem', background: 'var(--bg-base)', padding: '3px', borderRadius: 'var(--radius-md)' }}>
-          <button
-            type="button"
-            onClick={() => setLang('en')}
-            style={{
-              background: lang === 'en' ? 'white' : 'transparent',
-              border: lang === 'en' ? '1px solid var(--border)' : 'none',
-              color: lang === 'en' ? 'var(--primary)' : 'var(--text-600)',
-              padding: '0.3rem 0.65rem',
-              borderRadius: 'var(--radius-md)',
-              fontWeight: lang === 'en' ? 700 : 500,
-              fontSize: '0.78rem',
-              cursor: 'pointer',
-              boxShadow: lang === 'en' ? 'var(--shadow-sm)' : 'none'
-            }}
-          >
-            🇬🇧 English
-          </button>
-          <button
-            type="button"
-            onClick={() => setLang('st')}
-            style={{
-              background: lang === 'st' ? 'white' : 'transparent',
-              border: lang === 'st' ? '1px solid var(--border)' : 'none',
-              color: lang === 'st' ? 'var(--green)' : 'var(--text-600)',
-              padding: '0.3rem 0.65rem',
-              borderRadius: 'var(--radius-md)',
-              fontWeight: lang === 'st' ? 700 : 500,
-              fontSize: '0.78rem',
-              cursor: 'pointer',
-              boxShadow: lang === 'st' ? 'var(--shadow-sm)' : 'none'
-            }}
-          >
-            🇱🇸 Sesotho
-          </button>
+          <button type="button" onClick={() => setLang('en')} style={{ background: lang === 'en' ? 'white' : 'transparent', border: lang === 'en' ? '1px solid var(--border)' : 'none', color: lang === 'en' ? 'var(--primary)' : 'var(--text-600)', padding: '0.3rem 0.65rem', borderRadius: 'var(--radius-md)', fontWeight: lang === 'en' ? 700 : 500, fontSize: '0.78rem', cursor: 'pointer', boxShadow: lang === 'en' ? 'var(--shadow-sm)' : 'none' }}>🇬🇧 English</button>
+          <button type="button" onClick={() => setLang('st')} style={{ background: lang === 'st' ? 'white' : 'transparent', border: lang === 'st' ? '1px solid var(--border)' : 'none', color: lang === 'st' ? 'var(--green)' : 'var(--text-600)', padding: '0.3rem 0.65rem', borderRadius: 'var(--radius-md)', fontWeight: lang === 'st' ? 700 : 500, fontSize: '0.78rem', cursor: 'pointer', boxShadow: lang === 'st' ? 'var(--shadow-sm)' : 'none' }}>🇱🇸 Sesotho</button>
         </div>
       </div>
 
@@ -241,12 +228,7 @@ export default function ReportProblem({ userId }) {
 
           <div className="form-group full">
             <label>{t('report_location_label')}</label>
-            <input
-              value={form.location_text}
-              onChange={set('location_text')}
-              placeholder={t('report_location_placeholder')}
-              required
-            />
+            <input value={form.location_text} onChange={set('location_text')} placeholder={t('report_location_placeholder')} required />
           </div>
 
           <div className="form-group full">
@@ -263,30 +245,30 @@ export default function ReportProblem({ userId }) {
 
           <div className="form-group full">
             <label>{t('report_desc_label')}</label>
-            <textarea
-              rows={4}
-              value={form.description}
-              onChange={set('description')}
-              required
-              placeholder={t('report_desc_placeholder')}
-            />
+            <textarea rows={4} value={form.description} onChange={set('description')} required placeholder={t('report_desc_placeholder')} />
           </div>
 
           <div className="form-group full">
             <label>{t('report_photo_label')}</label>
-            <ImageUploader
-              photo={photo}
-              setPhoto={setPhoto}
-              photoPreview={photoPreview}
-              setPhotoPreview={setPhotoPreview}
-            />
+            <ImageUploader photo={photo} setPhoto={setPhoto} photoPreview={photoPreview} setPhotoPreview={setPhotoPreview} />
           </div>
 
           <div className="form-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-            <button type="button" onClick={handleFallback} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--green)', borderColor: 'var(--green)', background: '#F0FDF4' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-              <span>{t('report_sms_fallback')}</span>
-            </button>
+            
+            {/* FALLBACK BUTTONS (SMS & WHATSAPP) */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button type="button" onClick={handleSMS} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--green)', borderColor: 'var(--green)', background: '#F0FDF4' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                <span>{t('report_sms_fallback')}</span>
+              </button>
+
+              <button type="button" onClick={handleWhatsApp} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#25D366', borderColor: '#25D366', background: '#F0FDF4' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+                <span>Use WhatsApp</span>
+              </button>
+            </div>
 
             <button type="submit" className="btn-hero" disabled={submitting} style={{ background: 'var(--primary)', color: 'white', minWidth: '220px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
               <ZapIcon size={18} color="white" />
@@ -322,9 +304,7 @@ export default function ReportProblem({ userId }) {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-600)' }}>{t('report_priority_sla')}</span>
-                <span style={{ textTransform: 'capitalize', fontWeight: 700, color: '#DC2626' }}>
-                  {issuedWorkOrder.priority}
-                </span>
+                <span style={{ textTransform: 'capitalize', fontWeight: 700, color: '#DC2626' }}>{issuedWorkOrder.priority}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-600)' }}>{t('report_speed')}</span>
@@ -337,19 +317,11 @@ export default function ReportProblem({ userId }) {
             </div>
 
             <div style={{ display: 'flex', gap: '1rem' }}>
-              <button
-                onClick={() => nav('/my-reports')}
-                className="btn-hero"
-                style={{ flex: 1, justifyContent: 'center', background: 'var(--primary)', color: 'white', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
-              >
+              <button onClick={() => nav('/my-reports')} className="btn-hero" style={{ flex: 1, justifyContent: 'center', background: 'var(--primary)', color: 'white', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
                 <span>{t('report_btn_track')}</span>
                 <ArrowRightIcon size={16} color="white" />
               </button>
-              <button
-                onClick={() => nav('/')}
-                className="btn-secondary"
-                style={{ flex: 1, justifyContent: 'center' }}
-              >
+              <button onClick={() => nav('/')} className="btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>
                 {t('report_btn_home')}
               </button>
             </div>
