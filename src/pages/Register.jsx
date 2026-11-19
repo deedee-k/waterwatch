@@ -63,7 +63,7 @@ export default function Register() {
           <form onSubmit={submit}>
             <div className="form-group">
               <label>Full Name</label>
-              <input value={form.full_name} onChange={set('full_name')} required placeholder="John Doe" />
+              <input value={form.full_name} onChange={set('full_name')} required placeholder="John Molapo" />
             </div>
             <div className="form-group">
               <label>{method === 'phone' ? 'Phone Number' : 'Email Address'}</label>
