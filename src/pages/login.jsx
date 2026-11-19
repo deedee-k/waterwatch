@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { db } from '../lib/db'
+import { useTheme } from '../lib/theme'
+import { SunIcon, MoonIcon } from '../components/Icons'
 
 export default function Login() {
   const nav = useNavigate()
+  const { theme, toggleTheme } = useTheme()
   
   // Community Login State
   const [method, setMethod] = useState('phone')
@@ -14,7 +18,7 @@ export default function Login() {
 
   // Staff Login State
   const [isStaffMode, setIsStaffMode] = useState(false)
-  const [staffRole, setStaffRole] = useState('wasco')
+  const [staffEmail, setStaffEmail] = useState('')
   const [staffPassword, setStaffPassword] = useState('')
   const [staffErr, setStaffErr] = useState('')
   const [staffLoading, setStaffLoading] = useState(false)
@@ -22,10 +26,29 @@ export default function Login() {
   async function submitCommunity(e) {
     e.preventDefault()
     setErr(''); setLoading(true)
+
+    // 1. Check for Offline Session
+    if (!navigator.onLine) {
+      const cachedSession = localStorage.getItem('waterwatch_offline_session')
+      if (cachedSession) return nav('/')
+      setErr("Offline. Please connect to the internet to log in.")
+      setLoading(false)
+      return
+    }
+
+    // 2. Online Login via Supabase
     const email = method === 'phone' ? `${identifier.replace(/\D/g, '')}@waterwatch.local` : identifier
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    
     setLoading(false)
+    
     if (error) return setErr(error.message)
+
+    if (data?.session) {
+      localStorage.setItem('waterwatch_offline_session', JSON.stringify({ user: data.user, timestamp: Date.now() }))
+      const { data: prof } = await supabase.from('profiles').select('*').eq('id', data.user.id).single()
+      if (prof) await db.meta.put({ key: 'profile', ...prof })
+    }
     nav('/')
   }
 
@@ -33,18 +56,48 @@ export default function Login() {
     e.preventDefault()
     setStaffErr(''); setStaffLoading(true)
     
-    // These match the accounts you created in Supabase
-    const email = staffRole === 'wasco' ? 'wasco@waterwatch.com' : 'tech@waterwatch.com'
+    if (!navigator.onLine) {
+      setStaffErr("Staff portal requires an active internet connection for security reasons.")
+      setStaffLoading(false)
+      return
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ 
+      email: staffEmail, 
+      password: staffPassword 
+    })
     
-    const { error } = await supabase.auth.signInWithPassword({ email, password: staffPassword })
     setStaffLoading(false)
     
-    if (error) return setStaffErr("Incorrect password. Contact Tec")
+    if (error) return setStaffErr(error.message)
     nav('/')
   }
 
   return (
-    <div className="auth-wrapper">
+    <div className="auth-wrapper" style={{ position: 'relative' }}>
+      
+      {/* FULLY VISIBLE THEME TOGGLE */}
+      <div style={{ position: 'absolute', top: '1.5rem', right: '2rem', zIndex: 999 }}>
+        <button 
+          onClick={toggleTheme}
+          style={{ 
+            background: 'var(--bg-surface)', 
+            color: 'var(--text-900)', 
+            border: '1px solid var(--border)', 
+            padding: '0.6rem',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            display: 'grid',
+            placeItems: 'center',
+            boxShadow: 'var(--shadow-md)',
+            transition: 'all 0.2s'
+          }}
+          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+        >
+          {theme === 'dark' ? <SunIcon size={20} color="var(--primary)" /> : <MoonIcon size={20} color="var(--primary)" />}
+        </button>
+      </div>
+
       <div className="auth-left">
         <div style={{ zIndex: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
@@ -60,7 +113,6 @@ export default function Login() {
         <div className="auth-form">
           
           {!isStaffMode ? (
-            /* --- COMMUNITY LOGIN VIEW --- */
             <>
               <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem' }}>Community Login</h2>
               <p style={{ color: 'var(--text-600)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Sign in to report water faults</p>
@@ -80,7 +132,7 @@ export default function Login() {
                   <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
                 </div>
                 
-                {err && <div style={{ color: '#DC2626', fontSize: '0.85rem', marginBottom: '1rem' }}>{err}</div>}
+                {err && <div style={{ color: '#DC2626', fontSize: '0.85rem', marginBottom: '1rem', background: '#FEF2F2', padding: '0.5rem', borderRadius: '4px' }}>{err}</div>}
                 
                 <button type="submit" className="btn-hero" style={{ width: '100%', justifyContent: 'center', background: 'var(--primary)', color: 'white' }} disabled={loading}>
                   {loading ? 'Signing in…' : 'Sign In'}
@@ -89,18 +141,10 @@ export default function Login() {
               
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', fontSize: '0.85rem', color: 'var(--text-600)' }}>
                 <span>Don't have an account? <Link to="/register" style={{ color: 'var(--primary)', fontWeight: '600', textDecoration: 'none' }}>Register</Link></span>
-                
-                {/* HIDDEN STAFF PORTAL LINK */}
-                <button 
-                  onClick={() => setIsStaffMode(true)} 
-                  style={{ background: 'none', border: 'none', color: 'var(--text-400)', fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  Staff Portal
-                </button>
+                <button onClick={() => setIsStaffMode(true)} style={{ background: 'none', border: 'none', color: 'var(--text-400)', fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline' }}>Staff Portal</button>
               </div>
             </>
           ) : (
-            /* --- STAFF LOGIN VIEW --- */
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                 <button onClick={() => setIsStaffMode(false)} style={{ background: 'none', border: 'none', color: 'var(--text-400)', cursor: 'pointer', fontSize: '1.2rem' }}>&larr;</button>
@@ -110,27 +154,17 @@ export default function Login() {
 
               <form onSubmit={submitStaff}>
                 <div className="form-group">
-                  <label>Select Department</label>
-                  <select value={staffRole} onChange={(e) => setStaffRole(e.target.value)}>
-                    <option value="wasco">WASCO Operations Center</option>
-                    <option value="technician">Technician Field Tasks</option>
-                  </select>
+                  <label>Work Email</label>
+                  <input type="email" value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} placeholder="e.g. admin@wasco.co.ls" required />
                 </div>
-                
                 <div className="form-group">
-                  <label>Staff Password</label>
-                  <input 
-                    type="password" 
-                    value={staffPassword} 
-                    onChange={(e) => setStaffPassword(e.target.value)} 
-                    placeholder={staffRole === 'wasco' ? 'Enter password' : 'Enter password'}
-                    required 
-                  />
+                  <label>Password</label>
+                  <input type="password" value={staffPassword} onChange={(e) => setStaffPassword(e.target.value)} placeholder="Enter your password" required />
                 </div>
 
-                {staffErr && <div style={{ color: '#DC2626', fontSize: '0.85rem', marginBottom: '1rem' }}>{staffErr}</div>}
+                {staffErr && <div style={{ color: '#DC2626', fontSize: '0.85rem', marginBottom: '1rem', background: '#FEF2F2', padding: '0.5rem', borderRadius: '4px' }}>{staffErr}</div>}
 
-                <button type="submit" className="btn-hero" style={{ width: '100%', justifyContent: 'center', background: 'var(--text-900)', color: 'white' }} disabled={staffLoading}>
+                <button type="submit" className="btn-hero" style={{ width: '100%', justifyContent: 'center', background: 'var(--primary)', color: 'white' }} disabled={staffLoading}>
                   {staffLoading ? 'Authenticating…' : 'Access Secure Portal'}
                 </button>
               </form>

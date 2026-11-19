@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase'
 import { startSyncLoop, onSyncChange, isOnline, flushOutbox } from './lib/sync'
 import { db } from './lib/db'
 import { LanguageProvider, useLanguage, LanguageModalPanel } from './lib/i18n'
+import { ThemeProvider, useTheme } from './lib/theme'
 import LanguageSelector from './components/LanguageSelector'
 import ErrorBoundary from './components/ErrorBoundary'
 import {
@@ -15,7 +16,9 @@ import {
   GlobeIcon,
   GaugeIcon,
   ZapIcon,
-  UsersIcon
+  UsersIcon,
+  SunIcon,
+  MoonIcon
 } from './components/Icons'
 
 import Login from './pages/login'
@@ -75,15 +78,8 @@ function OfflineBanner() {
       )}
       {toast && (
         <div className="toast-sync" style={{
-          position: 'fixed',
-          bottom: '1rem',
-          right: '1rem',
-          background: 'var(--green)',
-          color: 'white',
-          padding: '0.5rem 1rem',
-          borderRadius: '0.4rem',
-          boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-          zIndex: 2000,
+          position: 'fixed', bottom: '1rem', right: '1rem', background: 'var(--green)', color: 'white',
+          padding: '0.5rem 1rem', borderRadius: '0.4rem', boxShadow: '0 2px 6px rgba(0,0,0,0.2)', zIndex: 2000,
         }}>{toast}</div>
       )}
     </>
@@ -94,18 +90,12 @@ function NavLink({ to, icon: Icon, children, showDot }) {
   const location = useLocation()
   const active = location.pathname === to
   return (
-    <Link
-      to={to}
-      className={active ? 'active' : ''}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '0.6rem' }}
-    >
+    <Link to={to} className={active ? 'active' : ''} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '0.6rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
         {Icon && <Icon size={18} color="currentColor" />}
         <span>{children}</span>
       </div>
-      {showDot && (
-        <span style={{ width: '8px', height: '8px', background: '#DC2626', borderRadius: '50%', display: 'inline-block' }} />
-      )}
+      {showDot && <span style={{ width: '8px', height: '8px', background: '#DC2626', borderRadius: '50%', display: 'inline-block' }} />}
     </Link>
   )
 }
@@ -129,9 +119,7 @@ function MobileNavItem({ to, icon: Icon, label, showDot, isFab }) {
     <Link to={to} className={`mobile-nav-item ${active ? 'active' : ''}`}>
       <div style={{ position: 'relative' }}>
         <Icon size={20} color={active ? 'var(--primary)' : 'var(--text-600)'} />
-        {showDot && (
-          <span style={{ position: 'absolute', top: -2, right: -2, width: '7px', height: '7px', background: '#DC2626', borderRadius: '50%' }} />
-        )}
+        {showDot && <span style={{ position: 'absolute', top: -2, right: -2, width: '7px', height: '7px', background: '#DC2626', borderRadius: '50%' }} />}
       </div>
       <span>{label}</span>
     </Link>
@@ -140,21 +128,38 @@ function MobileNavItem({ to, icon: Icon, label, showDot, isFab }) {
 
 function MainApp() {
   const { lang, t } = useLanguage()
+  const { theme, toggleTheme } = useTheme()
   const [session, setSession] = useState(undefined)
   const [profile, setProfile] = useState(null)
   const [hasAlerts, setHasAlerts] = useState(false)
   const [showLangModal, setShowLangModal] = useState(false)
 
   useEffect(() => {
-    db.auth.get('session').then(stored => {
-      if (stored && stored.user) {
-        setSession(stored);
-        return;
+    const cachedSession = localStorage.getItem('waterwatch_offline_session')
+    
+    if (!navigator.onLine && cachedSession) {
+      try {
+        const parsed = JSON.parse(cachedSession)
+        setSession({ user: parsed.user })
+        return
+      } catch (e) {}
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      if (data.session) {
+        localStorage.setItem('waterwatch_offline_session', JSON.stringify({ user: data.session.user, timestamp: Date.now() }))
       }
-      supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    return () => sub.subscription.unsubscribe();
+    })
+    
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s)
+      if (s) {
+        localStorage.setItem('waterwatch_offline_session', JSON.stringify({ user: s.user, timestamp: Date.now() }))
+      }
+    })
+    
+    return () => sub.subscription.unsubscribe()
   }, [])
 
   useEffect(() => {
@@ -162,20 +167,27 @@ function MainApp() {
 
     supabase.from('profiles').select('*').eq('id', session.user.id).single()
       .then(({ data }) => setProfile(data))
+      .catch(() => {
+        db.meta.get('profile').then(cached => {
+          if (cached) setProfile(cached)
+        })
+      })
 
     const stop = startSyncLoop(session.user.id, profile?.role)
-
-    setTimeout(() => {
-      flushOutbox()
-    }, 1000)
+    setTimeout(() => { flushOutbox() }, 1000)
 
     supabase.from('outage_alerts').select('id').eq('active', true).then(({ data }) => {
       if (data && data.length > 0) setHasAlerts(true)
       else setHasAlerts(false)
-    })
+    }).catch(() => {})
 
     return stop
   }, [session, profile?.role])
+
+  function handleLogout() {
+    localStorage.removeItem('waterwatch_offline_session')
+    supabase.auth.signOut()
+  }
 
   if (session === undefined) {
     return <div style={{ display: 'grid', placeItems: 'center', height: '100vh', fontFamily: 'Inter' }}>Loading WaterWatch…</div>
@@ -204,8 +216,11 @@ function MainApp() {
           <span>WaterWatch</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <button onClick={toggleTheme} style={{ background: 'none', border: 'none', color: 'var(--text-600)', cursor: 'pointer' }}>
+            {theme === 'dark' ? <SunIcon size={18} /> : <MoonIcon size={18} />}
+          </button>
           <LanguageSelector onOpen={() => setShowLangModal(true)} />
-          <button className="btn-logout" onClick={() => supabase.auth.signOut()} title={t('nav_logout')} style={{ padding: '0.3rem' }}>
+          <button className="btn-logout" onClick={handleLogout} title={t('nav_logout')} style={{ padding: '0.3rem' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
           </button>
         </div>
@@ -220,14 +235,39 @@ function MainApp() {
             </div>
           </div>
 
-          <div style={{ padding: '0.75rem 1rem 0 1rem' }}>
+          <div style={{ padding: '0.75rem 1rem 0 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <button type="button" className="lang-toggle-btn" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowLangModal(true)}>
               <GlobeIcon size={16} color="var(--primary)" />
               <span>{lang === 'st' ? '🇱🇸 Sesotho Side' : '🇬🇧 English Side'}</span>
             </button>
+            
+            {/* UPDATED THEME TOGGLE BUTTON */}
+            <button 
+              type="button" 
+              onClick={toggleTheme}
+              style={{ 
+                width: '100%', 
+                justifyContent: 'center',
+                background: theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'var(--primary)', 
+                color: 'white',
+                border: 'none',
+                padding: '0.6rem',
+                borderRadius: 'var(--radius-md)',
+                fontWeight: 600,
+                boxShadow: 'var(--shadow-sm)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'all 0.2s'
+              }} 
+            >
+              {theme === 'dark' ? <SunIcon size={16} color="white" /> : <MoonIcon size={16} color="white" />}
+              <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+            </button>
           </div>
 
-          <nav className="nav-pro">
+          <nav className="nav-pro" style={{ marginTop: '1rem' }}>
             {profile?.role === 'community' && <>
               <NavLink to="/" icon={HomeIcon}>{t('nav_overview')}</NavLink>
               <NavLink to="/monitoring" icon={TapIcon}>{t('nav_monitoring')}</NavLink>
@@ -252,7 +292,7 @@ function MainApp() {
               <span className="name">{profile?.full_name || 'User'}</span>
               <span className="role">{profile?.role}</span>
             </div>
-            <button className="btn-logout" onClick={() => supabase.auth.signOut()} title={t('nav_logout')}>
+            <button className="btn-logout" onClick={handleLogout} title={t('nav_logout')}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
             </button>
           </div>
@@ -313,9 +353,11 @@ function MainApp() {
 export default function App() {
   return (
     <LanguageProvider>
-      <ErrorBoundary>
-        <MainApp />
-      </ErrorBoundary>
+      <ThemeProvider>
+        <ErrorBoundary>
+          <MainApp />
+        </ErrorBoundary>
+      </ThemeProvider>
     </LanguageProvider>
   )
 }

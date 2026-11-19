@@ -19,7 +19,9 @@ import {
   PhoneIcon, 
   MessageSquareIcon, 
   BuildingIcon,
-  UsersIcon
+  UsersIcon,
+  RefreshCwIcon,
+  AlertTriangleIcon
 } from '../components/Icons'
 
 const STATUSES = ['submitted', 'acknowledged', 'assigned', 'in_progress', 'resolved', 'closed', 'reopened']
@@ -33,21 +35,25 @@ function renderChannelIcon(iconType, size = 15) {
 }
 
 export default function WascoDashboard({ userId }) {
-  const navigate = useNavigate() // Used to navigate to Staff Management
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('faults')
   
+  // Data states
   const [reports, setReports] = useState([])
   const [dmas, setDmas] = useState([])
   const [waterPoints, setWaterPoints] = useState([])
   const [alerts, setAlerts] = useState([])
   const [technicians, setTechnicians] = useState([])
   const [categories, setCategories] = useState({})
+  const [smsQueue, setSmsQueue] = useState([]) // <--- NEW SMS QUEUE STATE
   
+  // Filter & View states
   const [statusFilter, setStatusFilter] = useState('all')
   const [channelFilter, setChannelFilter] = useState('all')
   const [selected, setSelected] = useState(null)
   const [newAlert, setNewAlert] = useState({ village: '', message: '' })
 
+  // Omnichannel Intake Modal state
   const [showIntakeModal, setShowIntakeModal] = useState(false)
   const [intakeForm, setIntakeForm] = useState({
     channel: 'call_center', customer_name: '', customer_phone: '',
@@ -57,16 +63,32 @@ export default function WascoDashboard({ userId }) {
   const [actionNotice, setActionNotice] = useState('')
 
   const loadAll = useCallback(async () => {
+    // 1. Load Faults
     try {
       const { data: reps } = await supabase.from('reports').select(`*, profiles!reports_reporter_id_fkey(full_name)`).order('created_at', { ascending: false })
       if (reps) setReports(reps)
     } catch { const localReps = await db.reports.toArray(); setReports(localReps || []) }
     
+    // 2. Load DMAs
     try { const { data: dmaData } = await supabase.from('dmas').select('*'); setDmas(dmaData || []) } catch {}
+    
+    // 3. Load Water Points
     try { const { data: wpData } = await supabase.from('water_points').select('*'); if (wpData) setWaterPoints(wpData) } catch {}
+    
+    // 4. Load Alerts
     try { const { data: alertData } = await supabase.from('outage_alerts').select('*').eq('active', true).order('created_at', { ascending: false }); setAlerts(alertData || []) } catch {}
+    
+    // 5. Load Staff
     try { const { data: techs } = await supabase.from('profiles').select('*').eq('role', 'technician'); setTechnicians(techs || []) } catch {}
+    
+    // 6. Load Categories
     try { const { data: cats } = await supabase.from('fault_categories').select('*'); if (cats) setCategories(Object.fromEntries(cats.map(c => [c.id, c]))) } catch {}
+    
+    // 7. Load SMS Queue (NEW)
+    try { 
+      const { data: smsData } = await supabase.from('sms_queue').select('*').order('created_at', { ascending: false })
+      setSmsQueue(smsData || []) 
+    } catch {}
   }, [])
 
   useEffect(() => { 
@@ -75,6 +97,7 @@ export default function WascoDashboard({ userId }) {
     return () => clearInterval(interval)
   }, [loadAll])
 
+  // --- KPI Counts ---
   const counts = {
     total: reports.length,
     pending: reports.filter(r => ['submitted', 'acknowledged'].includes(r.status)).length,
@@ -83,6 +106,7 @@ export default function WascoDashboard({ userId }) {
     autoIssued: reports.filter(r => r.auto_assigned || r.work_order_ref).length
   }
 
+  // Channel breakdown
   const channelCounts = {
     mobile_app: reports.filter(r => !r.source_channel || r.source_channel === 'mobile_app').length,
     call_center: reports.filter(r => r.source_channel === 'call_center').length,
@@ -90,6 +114,7 @@ export default function WascoDashboard({ userId }) {
     walk_in: reports.filter(r => r.source_channel === 'walk_in').length
   }
 
+  // Filtered reports
   const visibleReports = reports.filter(r => {
     const matchesStatus = statusFilter === 'all' || r.status === statusFilter
     const repChannel = r.source_channel || 'mobile_app'
@@ -97,6 +122,7 @@ export default function WascoDashboard({ userId }) {
     return matchesStatus && matchesChannel
   })
 
+  // --- Automated Work Order Dispatch Logic ---
   async function triggerAutoDispatch(report) {
     const dispatchPkg = createAutoDispatchPackage(report, technicians, reports, categories)
     const patch = {
@@ -125,6 +151,7 @@ export default function WascoDashboard({ userId }) {
     setTimeout(() => setActionNotice(''), 5000)
   }
 
+  // --- Omnichannel Intake Submission ---
   async function submitOmnichannelComplaint(e) {
     e.preventDefault()
     if (!intakeForm.category_id || !intakeForm.description) return
@@ -158,21 +185,39 @@ export default function WascoDashboard({ userId }) {
     setTimeout(() => setActionNotice(''), 5000)
   }
 
+  // --- Report Management ---
   async function updateReport(id, patch, note) {
     try { await supabase.from('reports').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id) } catch {}
     await db.reports.update(id, patch).catch(() => {})
+    
     if (patch.status) {
       const original = reports.find(r => r.id === id)
       try {
         await supabase.from('report_status_history').insert({ report_id: id, from_status: original?.status, to_status: patch.status, changed_by: userId, note: note || `Updated to ${patch.status}` })
+        
         if (original?.reporter_id) {
-          await supabase.from('notifications').insert({ user_id: original.reporter_id, report_id: id, type: 'status_change', message_en: `Your report ${original.ref} is now ${patch.status.replace('_', ' ')}`, message_st: `Tlaleho ea hau ${original.ref} e se e le ${patch.status.replace('_', ' ')}` })
+          // 1. In-App Notification
+          await supabase.from('notifications').insert({ 
+            user_id: original.reporter_id, report_id: id, type: 'status_change', 
+            message_en: `Your report ${original.ref} is now ${patch.status.replace('_', ' ')}`, 
+            message_st: `Tlaleho ea hau ${original.ref} e se e le ${patch.status.replace('_', ' ')}` 
+          })
+
+          // 2. SMS Queue Notification
+          const { data: profile } = await supabase.from('profiles').select('phone').eq('id', original.reporter_id).single()
+          if (profile?.phone) {
+            await supabase.from('sms_queue').insert({
+              phone_number: profile.phone,
+              message: `WASCO: Your report ${original.ref} status is now ${patch.status.replace('_', ' ').toUpperCase()}.`
+            })
+          }
         }
-      } catch {}
+      } catch (e) { console.error("Notification error:", e) }
     }
     await loadAll(); setSelected(null)
   }
 
+  // --- DMA & Alert Logic ---
   async function fixLeak(dmaId) { await supabase.from('dmas').update({ leak_suspected: false, current_pressure_bar: 4.5, last_updated: new Date().toISOString() }).eq('id', dmaId).catch(() => {}); await loadAll() }
   async function handleSendAlert(e) { e.preventDefault(); if (!newAlert.village || !newAlert.message) return; await supabase.from('outage_alerts').insert({ village: newAlert.village, message: newAlert.message }); setNewAlert({ village: '', message: '' }); await loadAll() }
   async function deleteAlert(id) { await supabase.from('outage_alerts').update({ active: false }).eq('id', id); await loadAll() }
@@ -199,6 +244,7 @@ export default function WascoDashboard({ userId }) {
         </div>
       </div>
 
+      {/* AUTOMATED WORK ORDER ISSUANCE ENGINE BANNER */}
       <div style={{ background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)', borderRadius: 'var(--radius-lg)', padding: '1.5rem 2rem', color: 'white', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem', boxShadow: '0 10px 25px -5px rgba(49, 46, 129, 0.4)' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
@@ -216,11 +262,13 @@ export default function WascoDashboard({ userId }) {
         </div>
       </div>
 
+      {/* TABS */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', overflowX: 'auto' }}>
         <button onClick={() => setActiveTab('faults')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'none', border: 'none', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', color: activeTab === 'faults' ? 'var(--primary)' : 'var(--text-600)', borderBottom: activeTab === 'faults' ? '2px solid var(--primary)' : 'none', paddingBottom: '0.5rem', whiteSpace: 'nowrap' }}><TapIcon size={18} /> Complaints</button>
         <button onClick={() => setActiveTab('dmas')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'none', border: 'none', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', color: activeTab === 'dmas' ? 'var(--primary)' : 'var(--text-600)', borderBottom: activeTab === 'dmas' ? '2px solid var(--primary)' : 'none', paddingBottom: '0.5rem', whiteSpace: 'nowrap' }}><GaugeIcon size={18} /> DMA Pressure</button>
         <button onClick={() => setActiveTab('quality')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'none', border: 'none', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', color: activeTab === 'quality' ? 'var(--primary)' : 'var(--text-600)', borderBottom: activeTab === 'quality' ? '2px solid var(--primary)' : 'none', paddingBottom: '0.5rem', whiteSpace: 'nowrap' }}><FlaskIcon size={18} /> Water Quality</button>
         <button onClick={() => setActiveTab('alerts')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'none', border: 'none', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', color: activeTab === 'alerts' ? 'var(--primary)' : 'var(--text-600)', borderBottom: activeTab === 'alerts' ? '2px solid var(--primary)' : 'none', paddingBottom: '0.5rem', whiteSpace: 'nowrap' }}><BellIcon size={18} /> Outage Alerts</button>
+        <button onClick={() => setActiveTab('sms')} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'none', border: 'none', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', color: activeTab === 'sms' ? 'var(--primary)' : 'var(--text-600)', borderBottom: activeTab === 'sms' ? '2px solid var(--primary)' : 'none', paddingBottom: '0.5rem', whiteSpace: 'nowrap' }}><MessageSquareIcon size={18} /> SMS Queue</button>
       </div>
 
       {/* --- FAULTS TAB --- */}
@@ -296,6 +344,36 @@ export default function WascoDashboard({ userId }) {
         <div className="dash-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <div className="card" style={{ padding: '2rem' }}><h3 style={{ marginTop: 0 }}>Broadcast Outage Alert</h3><form onSubmit={handleSendAlert}><div className="form-group"><label>Area</label><input value={newAlert.village} onChange={e => setNewAlert({...newAlert, village: e.target.value})} required /></div><div className="form-group"><label>Message</label><textarea rows={3} value={newAlert.message} onChange={e => setNewAlert({...newAlert, message: e.target.value})} required /></div><button type="submit" className="btn-hero" style={{ width: '100%', justifyContent: 'center', background: '#DC2626' }}>📢 Send Alert</button></form></div>
           <div><h3 style={{ marginTop: 0 }}>Active Alerts</h3><div className="list-group">{alerts.map(a => (<div key={a.id} className="card" style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', position: 'relative' }}><button onClick={() => deleteAlert(a.id)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', fontSize: '1.2rem' }}>&times;</button><strong style={{ color: '#991B1B' }}>📍 {a.village}</strong><p style={{ margin: '0.5rem 0' }}>{a.message}</p></div>))}</div></div>
+        </div>
+      )}
+
+      {/* --- SMS QUEUE TAB (NEW) --- */}
+      {activeTab === 'sms' && (
+        <div className="card" style={{ background: 'white', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
+          <div style={{ marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0 }}>Simulated SMS Gateway Queue</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-600)' }}>In production, these messages are sent via Africa's Talking or Twilio APIs.</p>
+          </div>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr><th>Phone Number</th><th>Message</th><th>Status</th><th>Date</th></tr>
+              </thead>
+              <tbody>
+                {smsQueue.map(sms => (
+                  <tr key={sms.id}>
+                    <td><strong>{sms.phone_number}</strong></td>
+                    <td>{sms.message}</td>
+                    <td><span className="status-pill assigned">{sms.status}</span></td>
+                    <td>{new Date(sms.created_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {smsQueue.length === 0 && (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-600)' }}>No SMS messages in queue.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
-import { AlertTriangleIcon, BellIcon, MapPinIcon } from '../components/Icons'
+import { AlertTriangleIcon, BellIcon, MapPinIcon, CheckCircleIcon } from '../components/Icons'
 
 export default function Notifications({ userId }) {
   const { lang, t } = useLanguage()
@@ -9,28 +9,34 @@ export default function Notifications({ userId }) {
   const [updates, setUpdates] = useState([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function loadData() {
-      // 1. Load WASCO Outage Alerts
-      const { data: alertData } = await supabase
-        .from('outage_alerts')
-        .select('*')
-        .eq('active', true)
-        .order('created_at', { ascending: false })
-      
-      // 2. Load Personal Status Updates
-      const { data: updateData } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
+  async function loadData() {
+    // 1. Load WASCO Outage Alerts
+    const { data: alertData } = await supabase
+      .from('outage_alerts')
+      .select('*')
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+    
+    // 2. Load Personal Status Updates
+    const { data: updateData } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
 
-      setAlerts(alertData || [])
-      setUpdates(updateData || [])
-      setLoading(false)
-    }
+    setAlerts(alertData || [])
+    setUpdates(updateData || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { loadData() }, [userId])
+
+  async function markAsRead(id) {
+    // Update the specific notification in Supabase
+    await supabase.from('notifications').update({ read: true }).eq('id', id)
+    // Reload the list to reflect the change immediately
     loadData()
-  }, [userId])
+  }
 
   return (
     <div className="dash-main" style={{ maxWidth: '800px', margin: '0 auto' }}>
@@ -80,21 +86,50 @@ export default function Notifications({ userId }) {
         </div>
       ) : (
         <div className="list-group">
-          {updates.map(u => (
-            <div key={u.id} className="list-item" style={{ alignItems: 'flex-start' }}>
-              <div className="list-icon" style={{ background: '#E0F2FE', color: '#0369A1' }}>
-                <BellIcon size={18} color="#0369A1" />
-              </div>
-              <div className="list-content">
-                <div style={{ fontSize: '0.95rem', color: 'var(--text-900)', marginBottom: '0.25rem' }}>
-                  {lang === 'st' && u.message_st ? u.message_st : u.message_en}
+          {updates.map(u => {
+            const isUnread = !u.read; // Assuming 'read' column exists and defaults to false
+
+            return (
+              <div 
+                key={u.id} 
+                className="list-item" 
+                style={{ 
+                  alignItems: 'flex-start', 
+                  // Highlight unread notifications with a subtle blue background and left border
+                  background: isUnread ? '#F0F9FF' : 'white',
+                  borderLeft: isUnread ? '4px solid var(--primary)' : '1px solid var(--border)'
+                }}
+              >
+                <div className="list-icon" style={{ background: isUnread ? '#E0F2FE' : '#F1F5F9', color: isUnread ? '#0369A1' : '#64748B' }}>
+                  {isUnread ? <BellIcon size={18} color="#0369A1" /> : <CheckCircleIcon size={18} color="#64748B" />}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-600)', marginTop: '0.25rem' }}>
-                  {new Date(u.created_at).toLocaleString()}
+                <div className="list-content">
+                  <div style={{ 
+                    fontSize: '0.95rem', 
+                    color: 'var(--text-900)', 
+                    marginBottom: '0.25rem',
+                    fontWeight: isUnread ? 600 : 400 // Bold text if unread
+                  }}>
+                    {lang === 'st' && u.message_st ? u.message_st : u.message_en}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-600)', marginTop: '0.25rem' }}>
+                    {new Date(u.created_at).toLocaleString()}
+                  </div>
                 </div>
+                
+                {/* MARK AS READ BUTTON */}
+                {isUnread && (
+                  <button 
+                    onClick={() => markAsRead(u.id)} 
+                    className="btn-secondary" 
+                    style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', borderColor: 'var(--primary)', color: 'var(--primary)' }}
+                  >
+                    {lang === 'st' ? 'Tšoaea e baliloe' : 'Mark Read'}
+                  </button>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

@@ -88,8 +88,8 @@ export default function ImageUploader({ photo: _photo, setPhoto, photoPreview, s
       {/* COMPRESSING LOADING INDICATOR */}
       {compressing && (
         <div style={{ 
-          background: '#F0F9FF', 
-          border: '1px solid #BAE6FD', 
+          background: 'rgba(0, 174, 239, 0.1)', 
+          border: '1px solid var(--border)', 
           borderRadius: 'var(--radius-lg)', 
           padding: '2rem', 
           textAlign: 'center',
@@ -113,14 +113,14 @@ export default function ImageUploader({ photo: _photo, setPhoto, photoPreview, s
       {/* PHOTO PREVIEW CARD (WHEN PHOTO SELECTED) */}
       {!compressing && photoPreview && (
         <div style={{ 
-          background: 'white', 
+          background: 'var(--bg-surface)', // <-- Fixed
           border: '1px solid var(--border)', 
           borderRadius: 'var(--radius-lg)', 
           overflow: 'hidden',
           boxShadow: 'var(--shadow-sm)',
           position: 'relative'
         }}>
-          <div style={{ position: 'relative', width: '100%', maxHeight: '320px', background: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'relative', width: '100%', maxHeight: '320px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <img 
               src={photoPreview} 
               alt="Fault Preview" 
@@ -161,7 +161,7 @@ export default function ImageUploader({ photo: _photo, setPhoto, photoPreview, s
             alignItems: 'center',
             flexWrap: 'wrap',
             gap: '0.75rem',
-            background: 'var(--bg-surface)'
+            background: 'var(--bg-surface)' // <-- Fixed
           }}>
             <div>
               <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-900)' }}>
@@ -187,9 +187,9 @@ export default function ImageUploader({ photo: _photo, setPhoto, photoPreview, s
                 type="button"
                 onClick={handleRemove}
                 style={{
-                  background: '#FEE2E2',
-                  border: '1px solid #FCA5A5',
-                  color: '#DC2626',
+                  background: 'rgba(220, 38, 38, 0.1)', // <-- Fixed to soft red
+                  border: '1px solid rgba(220, 38, 38, 0.2)', // <-- Fixed
+                  color: '#F87171',
                   padding: '0.45rem 0.8rem',
                   borderRadius: 'var(--radius-md)',
                   fontSize: '0.8rem',
@@ -200,7 +200,7 @@ export default function ImageUploader({ photo: _photo, setPhoto, photoPreview, s
                   gap: '0.35rem'
                 }}
               >
-                <TrashIcon size={14} color="#DC2626" />
+                <TrashIcon size={14} color="#F87171" />
                 <span>{isSt ? 'Tlosa' : 'Remove'}</span>
               </button>
             </div>
@@ -215,8 +215,8 @@ export default function ImageUploader({ photo: _photo, setPhoto, photoPreview, s
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
           style={{ 
-            border: isDragging ? '2px dashed var(--primary)' : '2px dashed #D1D5DB', 
-            background: isDragging ? '#F0F9FF' : 'var(--bg-base)', 
+            border: isDragging ? '2px dashed var(--primary)' : '2px dashed var(--border)', // <-- Fixed
+            background: isDragging ? 'rgba(0, 174, 239, 0.1)' : 'var(--bg-base)', // <-- Fixed
             borderRadius: 'var(--radius-lg)', 
             padding: '1.75rem 1.25rem', 
             textAlign: 'center',
@@ -227,7 +227,7 @@ export default function ImageUploader({ photo: _photo, setPhoto, photoPreview, s
           <div style={{ 
             width: '52px', 
             height: '52px', 
-            background: '#E0F2FE', 
+            background: 'rgba(0, 174, 239, 0.1)', // <-- Fixed
             color: 'var(--primary)', 
             borderRadius: '50%', 
             display: 'grid', 
@@ -277,7 +277,7 @@ export default function ImageUploader({ photo: _photo, setPhoto, photoPreview, s
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '0.4rem',
-                background: 'white'
+                background: 'var(--bg-surface)' // <-- Fixed
               }}
             >
               <ImageIcon size={18} color="var(--text-600)" />

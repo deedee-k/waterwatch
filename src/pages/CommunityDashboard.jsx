@@ -14,7 +14,8 @@ import {
   PlusCircleIcon, 
   ArrowRightIcon, 
   InfoIcon, 
-  GlobeIcon 
+  GlobeIcon,
+  StarIcon 
 } from '../components/Icons'
 
 export default function CommunityDashboard({ userId, onOpenLang }) {
@@ -24,19 +25,15 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
   const [activeAlerts, setActiveAlerts] = useState([])
 
   const loadData = useCallback(async () => {
-    // Load user reports from local Dexie
     const rows = await db.reports.where('reporter_id').equals(userId).reverse().sortBy('created_at')
     setReports(rows || [])
     const cats = await db.categories.toArray()
     setCategories(Object.fromEntries(cats.map(c => [c.id, c])))
     
-    // Fetch active outage alerts from Supabase
     try {
       const { data } = await supabase.from('outage_alerts').select('*').eq('active', true).order('created_at', { ascending: false })
       if (data) setActiveAlerts(data)
-    } catch {
-      // Offline fallback
-    }
+    } catch {}
   }, [userId])
 
   useEffect(() => {
@@ -52,13 +49,15 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
     resolved: reports.filter(r => ['resolved', 'closed'].includes(r.status)).length
   }
 
+  const unratedReports = reports.filter(r => ['resolved', 'closed'].includes(r.status) && !r.satisfaction_rating)
+
   return (
     <div className="dash-grid">
       <div className="dash-main">
         
         {/* TOP BILINGUAL TOGGLE PANEL STRIP */}
         <div style={{ 
-          background: 'white', 
+          background: 'var(--bg-surface)', // <-- Fixed
           border: '1px solid var(--border)', 
           borderRadius: 'var(--radius-lg)', 
           padding: '0.75rem 1.25rem', 
@@ -87,7 +86,7 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
               type="button"
               onClick={() => setLang('en')}
               style={{
-                background: lang === 'en' ? 'white' : 'transparent',
+                background: lang === 'en' ? 'var(--bg-surface)' : 'transparent',
                 border: lang === 'en' ? '1px solid var(--border)' : 'none',
                 color: lang === 'en' ? 'var(--primary)' : 'var(--text-600)',
                 padding: '0.35rem 0.75rem',
@@ -107,7 +106,7 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
               type="button"
               onClick={() => setLang('st')}
               style={{
-                background: lang === 'st' ? 'white' : 'transparent',
+                background: lang === 'st' ? 'var(--bg-surface)' : 'transparent',
                 border: lang === 'st' ? '1px solid var(--border)' : 'none',
                 color: lang === 'st' ? 'var(--green)' : 'var(--text-600)',
                 padding: '0.35rem 0.75rem',
@@ -127,7 +126,6 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
               <button
                 type="button"
                 onClick={onOpenLang}
-                title="Open Bilingual Selection Panel"
                 style={{
                   background: 'transparent',
                   border: 'none',
@@ -151,9 +149,9 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
               <div 
                 key={alert.id} 
                 style={{ 
-                  background: '#FEF2F2', 
+                  background: 'rgba(220, 38, 38, 0.1)', // <-- Better dark mode red
                   borderLeft: '4px solid #DC2626', 
-                  border: '1px solid #FECACA',
+                  border: '1px solid rgba(220, 38, 38, 0.3)',
                   padding: '1.25rem', 
                   borderRadius: 'var(--radius-lg)', 
                   display: 'flex', 
@@ -162,17 +160,17 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
                   boxShadow: 'var(--shadow-sm)' 
                 }}
               >
-                <div style={{ background: '#FEE2E2', padding: '0.5rem', borderRadius: '50%', color: '#DC2626' }}>
+                <div style={{ background: 'rgba(220, 38, 38, 0.2)', padding: '0.5rem', borderRadius: '50%', color: '#DC2626' }}>
                   <AlertTriangleIcon size={24} color="#DC2626" />
                 </div>
                 <div>
-                  <strong style={{ color: '#991B1B', display: 'block', marginBottom: '0.25rem', fontSize: '1rem' }}>
+                  <strong style={{ color: '#F87171', display: 'block', marginBottom: '0.25rem', fontSize: '1rem' }}>
                     {t('alert_outage_title')}: {alert.village}
                   </strong>
-                  <span style={{ color: '#7F1D1D', fontSize: '0.92rem', lineHeight: 1.5 }}>
+                  <span style={{ color: '#FCA5A5', fontSize: '0.92rem', lineHeight: 1.5 }}>
                     {alert.message}
                   </span>
-                  <div style={{ fontSize: '0.75rem', color: '#B91C1C', marginTop: '0.4rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#F87171', marginTop: '0.4rem' }}>
                     {new Date(alert.created_at).toLocaleString()}
                   </div>
                 </div>
@@ -181,10 +179,43 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
           </div>
         )}
 
+        {/* SATISFACTION RATING ALERT */}
+        {unratedReports.length > 0 && (
+          <div style={{ 
+            background: 'rgba(245, 158, 11, 0.1)', // <-- Better dark mode yellow
+            borderLeft: '4px solid #F59E0B', 
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            padding: '1.25rem', 
+            borderRadius: 'var(--radius-lg)', 
+            marginBottom: '1.5rem', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '1rem',
+            boxShadow: 'var(--shadow-sm)'
+          }}>
+            <div style={{ background: 'rgba(245, 158, 11, 0.2)', padding: '0.5rem', borderRadius: '50%', color: '#F59E0B' }}>
+              <StarIcon size={24} color="#F59E0B" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <strong style={{ color: '#FBBF24', display: 'block', marginBottom: '0.25rem', fontSize: '1rem' }}>
+                {lang === 'st' ? 'Lekanya Tokiso ea Hau!' : 'Rate your recent repair!'}
+              </strong>
+              <span style={{ color: '#FCD34D', fontSize: '0.9rem' }}>
+                {lang === 'st' 
+                  ? `U na le litlaleho tse ${unratedReports.length} tse lokisitsoeng. Ka kopo u li lekanye ho re thusa ho ntlafatsa litšebeletso.` 
+                  : `You have ${unratedReports.length} resolved report(s). Please rate them to help us improve our services.`}
+              </span>
+            </div>
+            <Link to="/my-reports" className="btn-primary-pro" style={{ background: '#F59E0B', whiteSpace: 'nowrap' }}>
+              {lang === 'st' ? 'Ea ho Litlaleho' : 'Go to My Reports'}
+            </Link>
+          </div>
+        )}
+
         {/* LIVE NETWORK SUPPLY STATUS CARD */}
         <div style={{ 
-          background: 'white', 
-          border: '1px solid #BBF7D0', 
+          background: 'var(--bg-surface)', // <-- Fixed
+          border: '1px solid var(--border)', 
           borderRadius: 'var(--radius-lg)', 
           padding: '1.25rem 1.5rem', 
           marginBottom: '1.5rem',
@@ -196,12 +227,12 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
           boxShadow: 'var(--shadow-sm)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ width: '44px', height: '44px', background: '#DCFCE7', borderRadius: '50%', display: 'grid', placeItems: 'center' }}>
-              <CheckCircleIcon size={24} color="#166534" />
+            <div style={{ width: '44px', height: '44px', background: 'rgba(22, 163, 74, 0.1)', borderRadius: '50%', display: 'grid', placeItems: 'center' }}>
+              <CheckCircleIcon size={24} color="#4ADE80" />
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ background: '#DCFCE7', color: '#166534', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>
+                <span style={{ background: 'rgba(22, 163, 74, 0.2)', color: '#4ADE80', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>
                   ● LIVE
                 </span>
                 <strong style={{ fontSize: '0.95rem', color: 'var(--text-900)' }}>
@@ -213,9 +244,8 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
               </div>
             </div>
           </div>
-
-          <div style={{ background: '#F0FDF4', padding: '0.4rem 0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid #86EFAC', textAlign: 'right' }}>
-            <span style={{ fontSize: '0.75rem', color: '#15803D', fontWeight: 700 }}>
+          <div style={{ background: 'rgba(22, 163, 74, 0.1)', padding: '0.4rem 0.8rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(22, 163, 74, 0.3)', textAlign: 'right' }}>
+            <span style={{ fontSize: '0.75rem', color: '#4ADE80', fontWeight: 700 }}>
               {t('supply_status_ok')}
             </span>
           </div>
@@ -260,8 +290,8 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
         </div>
 
         {reports.length === 0 ? (
-          <div className="card" style={{ background: 'white', padding: '2.5rem', textAlign: 'center', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', marginBottom: '1.5rem' }}>
-            <div style={{ width: '48px', height: '48px', background: '#F0F9FF', borderRadius: '50%', display: 'grid', placeItems: 'center', margin: '0 auto 1rem auto' }}>
+          <div className="card" style={{ background: 'var(--bg-surface)', padding: '2.5rem', textAlign: 'center', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', marginBottom: '1.5rem' }}>
+            <div style={{ width: '48px', height: '48px', background: 'rgba(0, 174, 239, 0.1)', borderRadius: '50%', display: 'grid', placeItems: 'center', margin: '0 auto 1rem auto' }}>
               <WaterDropIcon size={24} color="var(--primary)" />
             </div>
             <p style={{ color: 'var(--text-600)', margin: '0 0 1rem 0' }}>{t('no_reports_yet')}</p>
@@ -275,8 +305,8 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
             {reports.slice(0, 4).map(r => {
               const cat = categories[r.category_id]
               return (
-                <div key={r.id} className="list-item" style={{ alignItems: 'center' }}>
-                  <div className="list-icon" style={{ background: '#F0F9FF', color: 'var(--primary)' }}>
+                <div key={r.id} className="list-item" style={{ alignItems: 'center', background: 'var(--bg-surface)' }}>
+                  <div className="list-icon" style={{ background: 'rgba(0, 174, 239, 0.1)', color: 'var(--primary)' }}>
                     <WaterDropIcon size={20} color="var(--primary)" />
                   </div>
                   <div className="list-content">
@@ -284,8 +314,8 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <span>{lang === 'st' && cat?.name_st ? cat.name_st : (cat?.name_en || 'Water Fault')}</span>
                         {r.work_order_ref && (
-                          <span style={{ fontSize: '0.75rem', background: '#F3E8FF', color: '#7C3AED', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                            <ZapIcon size={12} color="#7C3AED" />
+                          <span style={{ fontSize: '0.75rem', background: 'rgba(124, 58, 237, 0.1)', color: '#A78BFA', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <ZapIcon size={12} color="#A78BFA" />
                             {r.work_order_ref}
                           </span>
                         )}
@@ -309,15 +339,15 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
         )}
 
         {/* WATER CONSERVATION & HEALTH TIP */}
-        <div style={{ background: '#F0FFF4', border: '1px solid #BBF7D0', borderRadius: 'var(--radius-lg)', padding: '1.25rem', display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-          <div style={{ color: '#16A34A', marginTop: '2px' }}>
-            <InfoIcon size={22} color="#16A34A" />
+        <div style={{ background: 'rgba(22, 163, 74, 0.1)', border: '1px solid rgba(22, 163, 74, 0.3)', borderRadius: 'var(--radius-lg)', padding: '1.25rem', display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+          <div style={{ color: '#4ADE80', marginTop: '2px' }}>
+            <InfoIcon size={22} color="#4ADE80" />
           </div>
           <div>
-            <strong style={{ color: '#15803D', fontSize: '0.9rem', display: 'block', marginBottom: '0.25rem' }}>
+            <strong style={{ color: '#4ADE80', fontSize: '0.9rem', display: 'block', marginBottom: '0.25rem' }}>
               💡 {t('tip_title')}
             </strong>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#14532D', lineHeight: 1.5 }}>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#86EFAC', lineHeight: 1.5 }}>
               {t('tip_text')}
             </p>
           </div>
@@ -326,29 +356,29 @@ export default function CommunityDashboard({ userId, onOpenLang }) {
 
       {/* SIDEBAR METRICS */}
       <div className="dash-side">
-        <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: 600 }}>{t('metric_total')}</h3>
-        <div className="metric-card blue">
+        <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: 600, color: 'var(--text-900)' }}>{t('metric_total')}</h3>
+        <div className="metric-card blue" style={{ background: 'var(--bg-surface)' }}>
           <div className="metric-label">{t('metric_total')}</div>
           <div className="metric-value">{stats.total}</div>
         </div>
-        <div className="metric-card orange">
+        <div className="metric-card orange" style={{ background: 'var(--bg-surface)' }}>
           <div className="metric-label">{t('metric_pending')}</div>
           <div className="metric-value">{stats.pending}</div>
         </div>
-        <div className="metric-card purple">
+        <div className="metric-card purple" style={{ background: 'var(--bg-surface)' }}>
           <div className="metric-label">{t('metric_in_progress')}</div>
           <div className="metric-value">{stats.inProgress}</div>
         </div>
-        <div className="metric-card green">
+        <div className="metric-card green" style={{ background: 'var(--bg-surface)' }}>
           <div className="metric-label">{t('metric_resolved')}</div>
           <div className="metric-value">{stats.resolved}</div>
         </div>
 
         {/* QUICK LINK TO MONITORING */}
-        <div className="card" style={{ background: 'white', padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
+        <div className="card" style={{ background: 'var(--bg-surface)', padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
             <TapIcon size={18} color="var(--primary)" />
-            <strong style={{ fontSize: '0.9rem' }}>{t('nav_monitoring')}</strong>
+            <strong style={{ fontSize: '0.9rem', color: 'var(--text-900)' }}>{t('nav_monitoring')}</strong>
           </div>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-600)', margin: '0 0 1rem 0' }}>
             Check real-time health and status of public taps and boreholes across Maseru.
